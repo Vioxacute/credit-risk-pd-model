@@ -1,0 +1,21 @@
+data:
+  raw_path: "../data/raw/loans.csv"
+  target: "default"
+  test_size: 0.4
+  random_state: 42
+
+label_mapping:
+  enabled: false
+  source_col: "loan_status"
+  default_values: ["Charged Off", "Default", "Late (31-120 days)"]
+  nondefault_values: ["Fully Paid", "Current"]
+
+model:
+  c_values: [0.1, 0.3, 1.0, 3.0, 10.0]
+  class_weight: "balanced"
+  calibration_method: "isotonic"
+
+output:
+  model_path: "../models/pd_model.joblib"
+  metrics_path: "../reports/metrics.json"
+  feature_importance_path: "../reports/logreg_top_coeffs.csv"
