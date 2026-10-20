@@ -1,7 +1,11 @@
+# Paths are relative to the repository root
 data:
-  raw_path: "../data/raw/loans.csv"
+  raw_path: "data/raw/loans.csv"
+  new_applications_path: "data/raw/new_applications.csv"
   target: "default"
-  test_size: 0.4
+  # Protected characteristics, excluded so the model cannot use them
+  drop_columns: ["personal_status_sex", "foreign_worker"]
+  test_size: 0.25
   random_state: 42
 
 label_mapping:
@@ -11,11 +15,23 @@ label_mapping:
   nondefault_values: ["Fully Paid", "Current"]
 
 model:
-  c_values: [0.1, 0.3, 1.0, 3.0, 10.0]
+  c_values: [0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0]
   class_weight: "balanced"
   calibration_method: "isotonic"
 
+# Upper PD bound of each risk grade. Set for a portfolio with a ~30% default rate.
+risk_bands:
+  A: 0.10
+  B: 0.20
+  C: 0.35
+  D: 0.55
+  E: 1.01
+
 output:
-  model_path: "../models/pd_model.joblib"
-  metrics_path: "../reports/metrics.json"
-  feature_importance_path: "../reports/logreg_top_coeffs.csv"
+  model_path: "models/pd_model.joblib"
+  metrics_path: "reports/metrics.json"
+  feature_importance_path: "reports/logreg_top_coeffs.csv"
+  scored_path: "reports/scored_applications.csv"
+  stress_path: "reports/stress_report.csv"
+  roc_path: "reports/roc_curve.png"
+  calibration_path: "reports/calibration_curve.png"

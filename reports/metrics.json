@@ -1,0 +1,13 @@
+{
+  "auc": 0.755,
+  "brier": 0.1757,
+  "ks": 0.3871,
+  "best_params": {
+    "clf__C": 0.1
+  },
+  "calibration_method": "isotonic",
+  "n_train": 742,
+  "n_test": 248,
+  "default_rate_train": 0.3005390835579515,
+  "default_rate_test": 0.3024193548387097
+}

@@ -13,30 +13,16 @@ from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from utils import ks_stat, load_config, map_default_label, save_json
+from utils import from_root, ks_stat, load_config, load_dataset, save_json
 
 
 def main() -> None:
-    cfg = load_config("config.yaml")
-
-    raw_path = cfg["data"]["raw_path"]
+    cfg = load_config()
     target = cfg["data"]["target"]
-
-    df = pd.read_csv(raw_path)
-    df = map_default_label(df, cfg)
-
-    if target not in df.columns:
-        raise ValueError(
-            f"Target column '{target}' not found. "
-            f"If your labels are strings, enable label_mapping in config.yaml."
-        )
-
-    df = df.dropna(subset=[target]).copy()
-    y = df[target].astype(int)
-    X = df.drop(columns=[target])
+    X, y = load_dataset(cfg)
 
     # Identify feature types
-    cat_cols = X.select_dtypes(include=["object", "category", "bool"]).columns.tolist()
+    cat_cols = X.select_dtypes(include=["object", "string", "category", "bool"]).columns.tolist()
     num_cols = [c for c in X.columns if c not in cat_cols]
 
     # Pipelines
@@ -96,7 +82,7 @@ def main() -> None:
         n_jobs=-1
     )
 
-        grid.fit(X_train, y_train)
+    grid.fit(X_train, y_train)
     best_pipe: Pipeline = grid.best_estimator_
 
     # Calibrate probabilities (critical for PD)
@@ -111,9 +97,9 @@ def main() -> None:
     ks = ks_stat(y_test.to_numpy(), p_test)
 
     metrics = {
-        "auc": auc,
-        "brier": brier,
-        "ks": ks,
+        "auc": round(auc, 4),
+        "brier": round(brier, 4),
+        "ks": round(ks, 4),
         "best_params": grid.best_params_,
         "calibration_method": method,
         "n_train": int(len(X_train)),
@@ -133,8 +119,10 @@ def main() -> None:
         "feature_info": {"numeric": num_cols, "categorical": cat_cols},
         "config": cfg,
     }
-    joblib.dump(artifact, cfg["output"]["model_path"])
-    save_json(cfg["output"]["metrics_path"], metrics)
+    model_path = from_root(cfg["output"]["model_path"])
+    model_path.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(artifact, model_path)
+    save_json(from_root(cfg["output"]["metrics_path"]), metrics)
 
     # Optional: export top coefficients (interpretable, very “credit risk”)
     # NOTE: coefficients only exist for the underlying logistic regression inside best_pipe.
@@ -147,7 +135,7 @@ def main() -> None:
         top = pd.DataFrame({"feature": feature_names, "coef": coefs})
         top["abs_coef"] = top["coef"].abs()
         top = top.sort_values("abs_coef", ascending=False).head(25)
-        top.to_csv(cfg["output"]["feature_importance_path"], index=False)
+        top.to_csv(from_root(cfg["output"]["feature_importance_path"]), index=False)
     except Exception as e:
         print(f"Warning: could not export coefficients ({e}).")
 

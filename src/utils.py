@@ -1,20 +1,27 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
-from typing import Any, Dict, List, Tuple
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import yaml
 
+ROOT = Path(__file__).resolve().parent.parent
 
-def load_config(path: str) -> dict:
-    with open(path, "r", encoding="utf-8") as f:
+
+def from_root(path: str) -> Path:
+    """Resolve a path from config.yaml, which is relative to the repository root."""
+    return ROOT / path
+
+
+def load_config(name: str = "config.yaml") -> dict:
+    with open(Path(__file__).parent / name, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
-def save_json(path: str, payload: dict) -> None:
+def save_json(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)
 
@@ -68,25 +75,30 @@ def map_default_label(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     return df
 
 
-@dataclass(frozen=True)
-class RiskBand:
-    lo: float
-    hi: float
-    grade: str
+def features(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
+    """Model inputs: everything except the target and the excluded columns."""
+    drop = [cfg["data"]["target"], *cfg["data"].get("drop_columns", [])]
+    return df.drop(columns=[c for c in drop if c in df.columns])
 
 
-DEFAULT_RISK_BANDS: List[RiskBand] = [
-    RiskBand(0.00, 0.01, "A"),
-    RiskBand(0.01, 0.03, "B"),
-    RiskBand(0.03, 0.07, "C"),
-    RiskBand(0.07, 0.15, "D"),
-    RiskBand(0.15, 1.01, "E"),
-]
+def load_dataset(cfg: dict) -> tuple[pd.DataFrame, pd.Series]:
+    """Load the training data as (features, target), applying the optional label mapping."""
+    target = cfg["data"]["target"]
+    df = map_default_label(pd.read_csv(from_root(cfg["data"]["raw_path"])), cfg)
+
+    if target not in df.columns:
+        raise ValueError(
+            f"Target column '{target}' not found. "
+            f"If your labels are strings, enable label_mapping in config.yaml."
+        )
+
+    df = df.dropna(subset=[target]).copy()
+    return features(df, cfg), df[target].astype(int)
 
 
-def pd_to_grade(pd_value: float, bands: List[RiskBand] | None = None) -> str:
-    bands = bands or DEFAULT_RISK_BANDS
-    for b in bands:
-        if b.lo <= pd_value < b.hi:
-            return b.grade
-    return bands[-1].grade
+def pd_to_grade(pd_value: float, bands: dict[str, float]) -> str:
+    """Risk grade for a PD, given each grade's upper PD bound in ascending order."""
+    for grade, upper in bands.items():
+        if pd_value < upper:
+            return grade
+    return list(bands)[-1]
